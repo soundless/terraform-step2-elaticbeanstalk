@@ -2,6 +2,18 @@ provider "aws" {
   region = "us-east-1"
 }
 
+resource "aws_s3_bucket" "default" {
+  bucket = "glxmanager.applicationversion.bucket"
+}
+
+resource "aws_s3_bucket_object" "default" {
+  # Download the zip file from AWS tutorial (Java SE)
+  # https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/tutorials.html
+  bucket = "${aws_s3_bucket.default.id}"
+  key = "beanstalk/java-se-jetty-gradle-v3.zip"
+  source = "java-se-jetty-gradle-v3.zip"
+}
+
 resource "aws_iam_instance_profile" "beanstalk_service" {
   name = "aws-elasticbeanstalk-service-role"
   role = "${aws_iam_role.beanstalk_service.name}"
@@ -107,10 +119,18 @@ resource "aws_elastic_beanstalk_application" "glxmanager" {
   description = "REST glxmanager"
 }
 
+resource "aws_elastic_beanstalk_application_version" "default" {
+  application = "test-glxmanager"
+  name = "java-se-jetty-gradle-v3"
+  bucket = "${aws_s3_bucket.default.id}"
+  key = "${aws_s3_bucket_object.default.id}"
+}
+
 resource "aws_elastic_beanstalk_environment" "glxmanager" {
   name = "glxmanager"
   application = "${aws_elastic_beanstalk_application.glxmanager.name}"
   solution_stack_name = "64bit Amazon Linux 2017.09 v2.6.8 running Java 8"
+  version_label = "${aws_elastic_beanstalk_application_version.default.name}"
   wait_for_ready_timeout = "20m"
 
   depends_on =  ["null_resource.setup_roles"]
@@ -178,7 +198,7 @@ resource "aws_elastic_beanstalk_environment" "glxmanager" {
   setting {
     namespace = "aws:autoscaling:launchconfiguration"
     name  = "SSHSourceRestriction"
-    value   = "tcp, 22, 22, ${var.vpc_cidr}"
+    value   = "tcp, 22, 22, 0.0.0.0/0"
   } 
   
   setting {
