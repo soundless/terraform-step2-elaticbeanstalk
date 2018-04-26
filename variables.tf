@@ -65,9 +65,9 @@ variable "security_groups" {
 }
 
 variable "service_role" {
-  default = "aws-elasticbeanstalk-service-role"
+  default = "terraform-elasticbeanstalk-service-role"
 }
 
 variable "ec2_role" {
-  default = "aws-elasticbeanstalk-ec2-role"
+  default = "terraform-elasticbeanstalk-ec2-role"
 }
