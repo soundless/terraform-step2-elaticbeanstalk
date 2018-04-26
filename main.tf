@@ -52,6 +52,10 @@ resource "aws_iam_role" "beanstalk_service" {
   ]
 }
 EOF
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_iam_role" "main" {
@@ -73,6 +77,10 @@ resource "aws_iam_role" "main" {
   ]
 }
 EOF
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "null_resource" "setup_roles"{
