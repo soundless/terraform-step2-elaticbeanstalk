@@ -1,3 +1,7 @@
+variable "name_prefix" {
+  default = "glxmanager-terraform"
+}
+
 variable "vpc_id" {
   default = "vpc-d9122cbe"
   description = "ID of the VPC to use"
@@ -58,4 +62,12 @@ variable "security_groups" {
   type    = "string"
   default = "default"
   description = "Lists the Amazon EC2 security groups to assign to the EC2 instances in the Auto Scaling group in order to define firewall rules for the instances."
+}
+
+variable "service_role" {
+  default = "aws-elasticbeanstalk-service-role"
+}
+
+variable "ec2_role" {
+  default = "aws-elasticbeanstalk-ec2-role"
 }

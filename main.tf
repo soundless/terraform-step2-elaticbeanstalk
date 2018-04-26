@@ -2,8 +2,14 @@ provider "aws" {
   region = "us-east-1"
 }
 
+data "aws_caller_identity" "current" {}
+
 resource "aws_s3_bucket" "default" {
-  bucket = "glxmanager.applicationversion.bucket"
+  bucket = "${var.name_prefix}-${data.aws_caller_identity.current.account_id}"
+
+  lifecycle {
+    ignore_changes = ["lifecycle_rule"]
+  }
 }
 
 resource "aws_s3_bucket_object" "default" {
@@ -14,18 +20,17 @@ resource "aws_s3_bucket_object" "default" {
   source = "java-se-jetty-gradle-v3.zip"
 }
 
-resource "aws_iam_instance_profile" "beanstalk_service" {
-  name = "aws-elasticbeanstalk-service-role"
-  role = "${aws_iam_role.beanstalk_service.name}"
-}
+resource "aws_iam_instance_profile" "main" {
+  name = "${var.name_prefix}-instance-profile"
+  role = "${aws_iam_role.main.name}"
 
-resource "aws_iam_instance_profile" "beanstalk_ec2" {
-  name = "aws-elasticbeanstalk-ec2-role"
-  role = "${aws_iam_role.beanstalk_ec2.name}"
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_iam_role" "beanstalk_service" {
-  name = "aws-elasticbeanstalk-service-role"
+  name = "${var.service_role}"
   path = "/"
 
   assume_role_policy = <<EOF
@@ -49,8 +54,8 @@ resource "aws_iam_role" "beanstalk_service" {
 EOF
 }
 
-resource "aws_iam_role" "beanstalk_ec2" {
-  name = "aws-elasticbeanstalk-ec2-role"
+resource "aws_iam_role" "main" {
+  name = "${var.ec2_role}"
   path = "/"
 
   assume_role_policy = <<EOF
@@ -58,6 +63,7 @@ resource "aws_iam_role" "beanstalk_ec2" {
   "Version": "2008-10-17",
   "Statement": [
   {
+    "Sid": "",
     "Effect": "Allow",
     "Principal": {
       "Service": "ec2.amazonaws.com"
@@ -71,63 +77,56 @@ EOF
 
 resource "null_resource" "setup_roles"{
   depends_on = [
+  "aws_iam_role.main",
+  "aws_iam_role_policy_attachment.beanstalk_service",
+  "aws_iam_role_policy_attachment.beanstalk_service_health",
   "aws_iam_role.beanstalk_service",
-  "aws_iam_instance_profile.beanstalk_service",
-  "aws_iam_policy_attachment.beanstalk_service",
-  "aws_iam_policy_attachment.beanstalk_service_health",
-  "aws_iam_role.beanstalk_ec2",
-  "aws_iam_instance_profile.beanstalk_ec2",
-  "aws_iam_policy_attachment.beanstalk_ec2_container",
-  "aws_iam_policy_attachment.beanstalk_ec2_web",
-  "aws_iam_policy_attachment.beanstalk_ec2_worker"
+  "aws_iam_role_policy_attachment.container_tier",
+  "aws_iam_role_policy_attachment.web_tier",
+  "aws_iam_role_policy_attachment.worker_tier"
   ]
 }
 
-resource "aws_iam_policy_attachment" "beanstalk_service" {
-  name = "elastic-beanstalk-service"
-  roles = ["${aws_iam_role.beanstalk_service.id}"]
+resource "aws_iam_role_policy_attachment" "beanstalk_service" {
+  role = "${aws_iam_role.beanstalk_service.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkService"
 }
 
-resource "aws_iam_policy_attachment" "beanstalk_service_health" {
-  name = "elastic-beanstalk-service-health"
-  roles = ["${aws_iam_role.beanstalk_service.id}"]
+resource "aws_iam_role_policy_attachment" "beanstalk_service_health" {
+  role = "${aws_iam_role.beanstalk_service.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth"
 }
 
-resource "aws_iam_policy_attachment" "beanstalk_ec2_worker" {
-  name = "elastic-beanstalk-ec2-worker"
-  roles = ["${aws_iam_role.beanstalk_ec2.id}"]
+resource "aws_iam_role_policy_attachment" "worker_tier" {
+  role       = "${aws_iam_role.main.name}"
   policy_arn = "arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier"
 }
 
-resource "aws_iam_policy_attachment" "beanstalk_ec2_web" {
-  name = "elastic-beanstalk-ec2-web"
-  roles = ["${aws_iam_role.beanstalk_ec2.id}"]
+resource "aws_iam_role_policy_attachment" "web_tier" {
+  role       = "${aws_iam_role.main.name}"
   policy_arn = "arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier"
 }
 
-resource "aws_iam_policy_attachment" "beanstalk_ec2_container" {
-  name = "elastic-beanstalk-ec2-container"
-  roles = ["${aws_iam_role.beanstalk_ec2.id}"]
+resource "aws_iam_role_policy_attachment" "container_tier" {
+  role       = "${aws_iam_role.main.name}"
   policy_arn = "arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker"
 }
 
-
 resource "aws_elastic_beanstalk_application" "glxmanager" {
-  name = "test-glxmanager"
-  description = "REST glxmanager"
+  name = "glxmanager"
+  description = "glxmanager - ${var.name_prefix}"
 }
 
+# application version
 resource "aws_elastic_beanstalk_application_version" "default" {
-  application = "test-glxmanager"
+  application = "glxmanager"
   name = "java-se-jetty-gradle-v3"
   bucket = "${aws_s3_bucket.default.id}"
   key = "${aws_s3_bucket_object.default.id}"
 }
 
 resource "aws_elastic_beanstalk_environment" "glxmanager" {
-  name = "glxmanager"
+  name = "glxmanager-terraform"
   application = "${aws_elastic_beanstalk_application.glxmanager.name}"
   solution_stack_name = "64bit Amazon Linux 2017.09 v2.6.8 running Java 8"
   version_label = "${aws_elastic_beanstalk_application_version.default.name}"
@@ -156,13 +155,19 @@ resource "aws_elastic_beanstalk_environment" "glxmanager" {
   setting {
     namespace = "aws:autoscaling:launchconfiguration"
     name  = "IamInstanceProfile"
-    value   = "${aws_iam_instance_profile.beanstalk_ec2.name}"
+    value   = "${aws_iam_instance_profile.main.arn}"
   }  
 
   setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name  = "SSHSourceRestriction"
+    value   = "tcp, 22, 22, 0.0.0.0/0"
+  } 
+  
+  setting {
     namespace = "aws:elasticbeanstalk:environment"
     name  = "ServiceRole"
-    value   = "${aws_iam_instance_profile.beanstalk_service.name}"
+    value   = "${var.service_role}"
   }
 
   setting {
@@ -193,12 +198,6 @@ resource "aws_elastic_beanstalk_environment" "glxmanager" {
     namespace = "aws:ec2:vpc"
     name  = "ELBSubnets"
     value   = "${var.subnet_one},${var.subnet_two}"
-  } 
-  
-  setting {
-    namespace = "aws:autoscaling:launchconfiguration"
-    name  = "SSHSourceRestriction"
-    value   = "tcp, 22, 22, 0.0.0.0/0"
   } 
   
   setting {
@@ -275,8 +274,4 @@ resource "aws_elastic_beanstalk_environment" "glxmanager" {
     name    = "EnvironmentType"
     value   = "LoadBalanced"
   }
-}
-
-output "glxmanager_cname" {
-  value = "${aws_elastic_beanstalk_environment.glxmanager.cname}" 
 }
